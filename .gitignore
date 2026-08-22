@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+.pytest_cache/
+*.egg-info/
+.claude/
+
+# Raw source data — too large for git/GitHub (162MB / 61MB) and not read at
+# runtime; only used locally by "Recompute Base Stock" to rebuild reference_*.csv.
+# Deployment ships the prebuilt reference_*.csv files instead.
+Sales_Merged.csv
+Gati_Memo_Issue_Merged.csv
+Sales_API_Fetched.csv
+Memo_Issue_API_Fetched.csv
+Sales_Return_Merged.csv
