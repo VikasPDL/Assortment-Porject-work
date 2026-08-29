@@ -1787,20 +1787,33 @@ if nav == "style_lookup":
                 if sales_calendar_style.empty:
                     st.info("No sales history for this style to build a month-wise trend.")
                 else:
+                    available_years = sorted(sales_calendar_style["Year"].dropna().astype(int).unique().tolist())
+                    year_choice = st.selectbox(
+                        "Year", ["All years"] + [str(y) for y in available_years],
+                        key=f"month_trend_year_{style_query}",
+                    )
+                    year_key = year_choice.replace(" ", "_")
+                    sales_calendar_style_year = (
+                        sales_calendar_style if year_choice == "All years"
+                        else sales_calendar_style[sales_calendar_style["Year"] == int(year_choice)]
+                    )
                     any_month_trend = False
                     for b in ["Sparkles", "Sparq"]:
-                        mt_b = month_category_pivot(sales_calendar_style, b, pivot_col="Category")
+                        mt_b = month_category_pivot(sales_calendar_style_year, b, pivot_col="Category")
                         cat_cols_mt = [c for c in mt_b.columns if c != "Month"]
                         if mt_b[cat_cols_mt].sum().sum() == 0:
                             continue
                         any_month_trend = True
                         st.markdown(f"**{b}**")
                         show_pivot(
-                            blank_zeros(mt_b, row_keys=["Month"]), f"lookup_month_trend_{b.lower()}_{style_query}",
+                            blank_zeros(mt_b, row_keys=["Month"]),
+                            f"lookup_month_trend_{b.lower()}_{style_query}_{year_key}",
                             fmt="%.0f", row_keys=["Month"],
                         )
+                        st.bar_chart(mt_b.set_index("Month")[cat_cols_mt])
                     if not any_month_trend:
-                        st.info("No sales history for this style in either brand.")
+                        no_data_scope = "" if year_choice == "All years" else f" in {year_choice}"
+                        st.info(f"No sales history for this style in either brand{no_data_scope}.")
 
             st.divider()
             # ---- Window 11: Zone Breakdown for this style ----
