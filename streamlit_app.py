@@ -39,7 +39,7 @@ SALES_RETURN_API_CONFIG = "sales_return_api_config.json"
 # no date-range picker to fill in every time.
 API_FETCH_START_DATE = datetime(2019, 1, 1).date()
 
-st.set_page_config(page_title="Assortment Stock & Base Stock", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="Assortment Stock & Base Stock", layout="wide", initial_sidebar_state="collapsed")
 
 st.markdown(
     """
@@ -238,6 +238,13 @@ st.markdown(
     }
     div[data-testid="stExpander"] summary:hover {
         background: var(--surface-alt) !important;
+    }
+    /* Home page section labels (Other API / Inventory / Sales & Performance /
+       Reports & Lookup) — bold and smaller than the default expander label. */
+    .st-key-home_group_expanders_other_api div[data-testid="stExpander"] summary p,
+    .st-key-home_group_expanders_tiles div[data-testid="stExpander"] summary p {
+        font-weight: 700 !important;
+        font-size: 0.8rem !important;
     }
 
     /* ---- Info / success / warning / error boxes ---- */
@@ -698,12 +705,13 @@ with st.sidebar:
         st.rerun()
 
     st.divider()
-    api_calls_enabled = st.toggle(
-        "🔓 Allow live API calls", value=False, key="api_calls_enabled",
-        help="Off by default so a stray click never hits the live system. Turn this on only when you actually want to fetch. Gates every Fetch button below, in both API sections.",
-    )
-    if not api_calls_enabled:
-        st.caption("🔒 API calls are off — every Fetch button below is disabled. Turn the toggle on above when you're ready to fetch.")
+    with st.expander("🔒 API Access", expanded=False):
+        api_calls_enabled = st.toggle(
+            "🔓 Allow live API calls", value=False, key="api_calls_enabled",
+            help="Off by default so a stray click never hits the live system. Turn this on only when you actually want to fetch. Gates every Fetch button below, in both API sections.",
+        )
+        if not api_calls_enabled:
+            st.caption("🔒 API calls are off — every Fetch button below is disabled. Turn the toggle on above when you're ready to fetch.")
 
     st.divider()
     with st.expander("⚙️ API Settings"):
@@ -1542,25 +1550,26 @@ if nav == "home":
             render_stat_card("Refreshed", last_refreshed, "🕒", "#dc2626")
 
     st.write("")
-    with st.expander("Quick Fetch", expanded=False):
-        if not api_calls_enabled:
-            st.caption("🔒 Turn on '🔓 Allow live API calls' in the sidebar to enable these buttons.")
-        quick_fetch_specs = [
-            ("Sales", SALES_API_CONFIG, SALES_API_OUT),
-            ("Sales Return", SALES_RETURN_API_CONFIG, SALES_RETURN_API_OUT),
-            ("Memo Issue", MEMO_API_CONFIG, MEMO_API_OUT),
-            ("Memo Return", MEMO_RETURN_API_CONFIG, MEMO_RETURN_API_OUT),
-        ]
-        quick_fetch_cols = st.columns(4)
-        for col, (label, config_path, out_path) in zip(quick_fetch_cols, quick_fetch_specs):
-            with col:
-                if st.button(f"⬇️ Fetch {label}", key=f"quick_fetch_{label}", width="stretch", disabled=not api_calls_enabled):
-                    try:
-                        with st.spinner(f"Fetching {label} API..."):
-                            n = fetch_transaction_api(label, config_path, out_path)
-                        st.toast(f"✅ {label} API worked — {n} rows fetched", icon="✅")
-                    except Exception as e:
-                        st.toast(f"❌ {label} API failed: {e}", icon="❌")
+    with st.container(key="home_group_expanders_other_api"):
+        with st.expander("Other API", expanded=False):
+            if not api_calls_enabled:
+                st.caption("🔒 Turn on '🔓 Allow live API calls' in the sidebar to enable these buttons.")
+            quick_fetch_specs = [
+                ("Sales", SALES_API_CONFIG, SALES_API_OUT),
+                ("Sales Return", SALES_RETURN_API_CONFIG, SALES_RETURN_API_OUT),
+                ("Memo Issue", MEMO_API_CONFIG, MEMO_API_OUT),
+                ("Memo Return", MEMO_RETURN_API_CONFIG, MEMO_RETURN_API_OUT),
+            ]
+            quick_fetch_cols = st.columns(4)
+            for col, (label, config_path, out_path) in zip(quick_fetch_cols, quick_fetch_specs):
+                with col:
+                    if st.button(f"⬇️ Fetch {label}", key=f"quick_fetch_{label}", width="stretch", disabled=not api_calls_enabled):
+                        try:
+                            with st.spinner(f"Fetching {label} API..."):
+                                n = fetch_transaction_api(label, config_path, out_path)
+                            st.toast(f"✅ {label} API worked — {n} rows fetched", icon="✅")
+                        except Exception as e:
+                            st.toast(f"❌ {label} API failed: {e}", icon="❌")
 
     st.write("")
     tiles_by_key = {t[0]: t for t in WINDOW_TILES}
@@ -1592,15 +1601,16 @@ if nav == "home":
         ("Reports & Lookup", ["flag", "no_style", "style_lookup"]),
     ]
     cols_per_row = 3
-    for group_label, keys in TILE_GROUPS:
-        with st.expander(group_label, expanded=False):
-            group_tiles = [tiles_by_key[k] for k in keys]
-            for row_start in range(0, len(group_tiles), cols_per_row):
-                row_tiles = group_tiles[row_start:row_start + cols_per_row]
-                cols = st.columns(cols_per_row)
-                for i, (col, tile) in enumerate(zip(cols, row_tiles)):
-                    accent = TILE_ACCENTS[(row_start + i) % len(TILE_ACCENTS)]
-                    render_tile(col, tile, accent)
+    with st.container(key="home_group_expanders_tiles"):
+        for group_label, keys in TILE_GROUPS:
+            with st.expander(group_label, expanded=False):
+                group_tiles = [tiles_by_key[k] for k in keys]
+                for row_start in range(0, len(group_tiles), cols_per_row):
+                    row_tiles = group_tiles[row_start:row_start + cols_per_row]
+                    cols = st.columns(cols_per_row)
+                    for i, (col, tile) in enumerate(zip(cols, row_tiles)):
+                        accent = TILE_ACCENTS[(row_start + i) % len(TILE_ACCENTS)]
+                        render_tile(col, tile, accent)
 else:
     icon, num, title = WINDOW_LOOKUP[nav]
     st.button("🏠 Home", key="nav_home_btn", on_click=_go_to, args=("home",))
