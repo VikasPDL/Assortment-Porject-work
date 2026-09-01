@@ -367,33 +367,33 @@ st.markdown(
         background: var(--surface);
         border: 1px solid var(--border);
         border-radius: var(--radius-md);
-        padding: 0.7rem 0.85rem;
+        padding: 0.5rem 0.65rem;
         box-shadow: var(--shadow-sm);
         height: 100%;
     }
     /* min-height keeps the icon/label row the same height across every
        card in a row, so values line up even when one label wraps to 2
        lines and its neighbor doesn't. */
-    .stat-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.4rem; margin-bottom: 0.4rem; min-height: 1.7rem; }
+    .stat-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.3rem; margin-bottom: 0.3rem; min-height: 1.4rem; }
     .stat-card-label {
         color: var(--text-muted);
-        font-size: 0.65rem;
+        font-size: 0.58rem;
         font-weight: 700;
         text-transform: uppercase;
-        letter-spacing: 0.03em;
-        line-height: 1.3;
+        letter-spacing: 0.02em;
+        line-height: 1.25;
         padding-top: 0.1rem;
     }
     .stat-card-icon {
-        width: 1.6rem; height: 1.6rem;
+        width: 1.3rem; height: 1.3rem;
         border-radius: var(--radius-sm);
         display: flex; align-items: center; justify-content: center;
-        font-size: 0.85rem;
+        font-size: 0.7rem;
         flex-shrink: 0;
     }
-    .stat-card-value { color: var(--text); font-size: 1.15rem; font-weight: 700; line-height: 1.2; word-break: break-word; }
-    .stat-card-value.small { font-size: 0.85rem; }
-    .stat-card-sub { color: var(--text-faint); font-size: 0.7rem; margin-top: 0.15rem; }
+    .stat-card-value { color: var(--text); font-size: 0.95rem; font-weight: 700; line-height: 1.2; word-break: break-word; }
+    .stat-card-value.small { font-size: 0.72rem; }
+    .stat-card-sub { color: var(--text-faint); font-size: 0.6rem; margin-top: 0.1rem; }
 
     /* ---- Page header (breadcrumb + title, matches app-ui-reference_1.html) ---- */
     .page-breadcrumb {
