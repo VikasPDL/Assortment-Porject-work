@@ -612,6 +612,18 @@ def build_api_headers(auth_name, auth_value, from_date=None, to_date=None):
 
 
 def _load_api_config(path):
+    """Checks Streamlit Secrets first (section name = the config filename
+    without .json, e.g. "stock_api_config") — this is what makes saved
+    credentials survive a redeploy on Streamlit Community Cloud, where the
+    local JSON file below doesn't persist (its filesystem resets on every
+    restart). Falls back to the local file, which is all local dev needs."""
+    section = os.path.splitext(os.path.basename(path))[0]
+    try:
+        if section in st.secrets:
+            sec = st.secrets[section]
+            return {"url": sec.get("url", ""), "auth_name": sec.get("auth_name", "AuthorizationToken"), "auth_value": sec.get("auth_value", "")}
+    except Exception:
+        pass  # no secrets.toml configured — normal for local dev
     if os.path.exists(path):
         with open(path) as f:
             return json.load(f)
