@@ -1493,7 +1493,6 @@ def show_store_pivot(pivot, row_keys, key_prefix, fmt="%.1f%%", best_label="Best
     """Like show_pivot, but skips number-formatting the text 'Best Store'
     column while still formatting its paired 'Best Store Value' column."""
     text_col = best_label
-    value_col = f"{best_label} Value"
     numeric_cols = [c for c in pivot.columns if c not in row_keys + [text_col]]
     if styler is not None:
         render_html_table(styler)
