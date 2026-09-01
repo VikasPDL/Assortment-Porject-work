@@ -355,6 +355,12 @@ st.markdown(
         border-top: 1px solid var(--border);
     }
     .tile-group-label:first-of-type { border-top: none; padding-top: 0; margin-top: 0.4rem; }
+    .choose-window-note {
+        color: var(--text-muted);
+        font-size: 0.78rem;
+        margin: 0.9rem 0 0.3rem 0.1rem;
+    }
+    .choose-window-note b { color: var(--text); }
 
     /* ---- Stat cards (colored icon badge, matches app-ui-reference_1.html) ---- */
     .stat-card {
@@ -1529,8 +1535,6 @@ nav = st.session_state["nav"]
 
 if nav == "home":
     st.markdown('<div class="home-eyebrow">12 windows · one dashboard</div>', unsafe_allow_html=True)
-    st.header("Choose a window")
-    st.write("Click a tile to open that window's data. You can jump between windows any time with the nav above.")
 
     if stock_grouped is None:
         st.info("No Stock data yet — use 'Fetch Stock from API' in the sidebar, or the Quick Fetch buttons below for the other APIs, to get started.")
@@ -1593,6 +1597,8 @@ if nav == "home":
     featured_cols = st.columns(2)
     for col, key, accent in zip(featured_cols, ["jewel_allocate", "srp"], TILE_ACCENTS):
         render_tile(col, tiles_by_key[key], accent)
+
+    st.markdown('<div class="choose-window-note"><b>Choose a window</b> — click a tile to open that window\'s data. You can jump between windows any time with the nav above.</div>', unsafe_allow_html=True)
 
     # Everything else, grouped and collapsible.
     TILE_GROUPS = [
