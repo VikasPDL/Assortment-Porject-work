@@ -33,6 +33,38 @@ def _find_record_list(payload, depth=0, max_depth=3):
     return None
 
 
+def _flatten_nested_records(records):
+    """The PoddarDiamonds transaction APIs (GetSaleData, GetSaleReturnData,
+    GetBranchTransferIssue, GetBranchTransferReceive — confirmed 2026-08-31)
+    return one record per transaction/invoice, with the actual piece-level
+    fields (JewelCode, Category, BaseMetal, MRP, StyleCode) nested inside a
+    per-transaction list (e.g. "JewelTransInward"), not at the top level —
+    a transaction with 3 pieces is 1 record with a 3-item nested list, not 3
+    records. Explodes each transaction's nested list into its own row,
+    carrying the parent's own fields (PartyCode, JewelTransDate, ...) along
+    with it — the same one-row-per-piece shape the CSV exports already use.
+    If no record has a nested list of dicts, returns records unchanged (so
+    a genuinely flat response — e.g. a future Stock API — isn't affected)."""
+    nested_key = None
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+        for key, value in record.items():
+            if isinstance(value, list) and value and isinstance(value[0], dict):
+                nested_key = key
+                break
+        if nested_key:
+            break
+
+    if nested_key is None:
+        return pd.DataFrame(records)
+
+    parent_fields = [k for k in records[0].keys() if k != nested_key]
+    child_fields = set(records[0][nested_key][0].keys()) if records[0].get(nested_key) else set()
+    meta = [f for f in parent_fields if f not in child_fields]  # drop names that would collide (e.g. JewelTransId)
+    return pd.json_normalize(records, record_path=nested_key, meta=meta)
+
+
 def fetch_api_dataframe(url, headers=None, timeout=120):
     """GET a JSON API and return it as a DataFrame. Accepts a bare JSON
     array of records, or an object wrapping the records under a common key
@@ -41,7 +73,9 @@ def fetch_api_dataframe(url, headers=None, timeout=120):
     headers is sent as-is — some APIs use a custom auth header name (e.g.
     "AuthorizationToken" instead of "Authorization"), or expect a date
     range as headers (e.g. "FromDate"/"ToDate"), so the caller builds the
-    full header dict rather than this function assuming a fixed shape."""
+    full header dict rather than this function assuming a fixed shape.
+    See _flatten_nested_records for the master-detail unwrapping this does
+    before returning — needed for the PoddarDiamonds transaction APIs."""
     resp = requests.get(url, headers=headers or {}, timeout=timeout)
     resp.raise_for_status()
     payload = resp.json()
@@ -60,7 +94,7 @@ def fetch_api_dataframe(url, headers=None, timeout=120):
             f"Raw response (first 1000 chars): {preview}"
         )
 
-    return pd.DataFrame(records)
+    return _flatten_nested_records(records)
 
 
 # Common alternate names seen across APIs for each internal column, tried in
@@ -93,43 +127,56 @@ def guess_column(target, available_cols):
     return None
 
 
-# Confirmed field mapping — all three PoddarDiamonds APIs (Sales, Memo
-# Issue, Stock) return the same record shape (Client, GrpName, JewelCode,
-# TransactionDate, BaseMetalQlyCode, MRP, Qty, ...), so one fixed mapping
-# covers all of them. No separate style-code field exists in any of them —
-# it's always derived from JewelCode (the text before "/").
+# Confirmed field mapping (verified 2026-08-31 against live GetSaleData,
+# GetBranchTransferIssue, and GetBranchTransferReceive responses — these
+# back the Sales, Memo Issue, and Memo Return fetch buttons respectively).
+# After _flatten_nested_records unwraps the per-transaction JewelTransInward
+# list, every field TRANSACTION_COLS needs is already present under its
+# exact own name (PartyCode, BaseMetal, Category, MRP, JewelTransDate,
+# JewelCode) — no renaming needed, so this is mostly an identity map.
+#
+# GetStockSummary (verified 2026-09-01) is unrelated to the transaction
+# shape above — it's already flat (no nested per-transaction list) and uses
+# its own field names: ClientCode (blank = unallocated fresh stock, same
+# meaning as the Excel upload's Client Code), StyleNo, SalePrice, ItemPcs.
 FIXED_FIELD_MAPPING = {
-    "PartyCode": "Client",
-    "BaseMetal": "BaseMetalQlyCode",
-    "Category": "GrpName",
+    "PartyCode": "PartyCode",
+    "BaseMetal": "BaseMetal",
+    "Category": "Category",
     "MRP": "MRP",
-    "JewelTransDate": "TransactionDate",
+    "JewelTransDate": "JewelTransDate",
     "JewelCode": "JewelCode",
-    "Client Code": "Client",
+    "Client Code": "ClientCode",
     "Jewel Code": "JewelCode",
-    "Base Metal": "BaseMetalQlyCode",
-    "Sale Price": "MRP",
-    "ItemPcs": "Qty",
+    "Base Metal": "BaseMetal",
+    "Sale Price": "SalePrice",
+    "ItemPcs": "ItemPcs",
 }
 _STYLE_TARGETS = {"StyleCode": "JewelCode", "Style No": "Jewel Code"}
 
 
 def apply_fixed_mapping(raw_df, targets):
-    """Maps raw_df's columns onto targets using FIXED_FIELD_MAPPING, deriving
-    any Style column from the Jewel Code (text before '/'). Raises ValueError
-    listing exactly what's missing if the fixed mapping doesn't fit this
+    """Maps raw_df's columns onto targets using FIXED_FIELD_MAPPING. A Style
+    column prefers a literal "StyleCode" field when the response has one
+    (confirmed present on GetSaleData/GetBranchTransferIssue/Receive after
+    flattening); falls back to deriving it from Jewel Code (text before
+    '/') for a response that doesn't. Raises ValueError listing exactly
+    what's missing if neither the fixed mapping nor the fallback fits this
     response — safer than guessing and silently mismapping a column."""
     out = pd.DataFrame()
     missing = []
 
     for target in targets:
         if target in _STYLE_TARGETS:
+            if "StyleCode" in raw_df.columns:
+                out[target] = raw_df["StyleCode"]
+                continue
             jewel_target = _STYLE_TARGETS[target]
             jewel_src = FIXED_FIELD_MAPPING.get(jewel_target)
             if jewel_src in raw_df.columns:
                 out[target] = raw_df[jewel_src].astype(str).str.split("/").str[0]
             else:
-                missing.append(f"{target} (needs '{jewel_src}' to derive from)")
+                missing.append(f"{target} (no literal 'StyleCode' field, and needs '{jewel_src}' to derive from)")
             continue
 
         src = FIXED_FIELD_MAPPING.get(target)

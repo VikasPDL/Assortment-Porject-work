@@ -149,6 +149,109 @@ def prepare_transactions(source, store_codes, store_lookup, valid_styles):
     return df
 
 
+def prepare_memo_return_transactions(return_source, prepared_memo, store_lookup, valid_styles):
+    """Gati_Stock_Return_Merged.csv-shaped source. Every row in that export
+    is recorded as inward to Poddar's own HO/branch (its PartyCode and
+    LocationName are always something like PDLJBKC / "PODDAR DIAMOND PVT
+    LTD.", never the retail store) — physically correct, that's where a
+    returned piece lands, but useless as a store attribution on its own.
+
+    A Jewel Code also isn't a fixed 1:1 store assignment: the same physical
+    piece circulates on repeated memo issue/return cycles across many
+    different stores over its life. So the real originating store for a
+    given return is whichever store most recently received that exact Jewel
+    Code on Memo Issue before this return's date — a backward as-of match on
+    Jewel Code against `prepared_memo` (the already-cleaned Memo Issue
+    history from prepare_transactions, so this join sees the same valid
+    store/style filtering Memo Issue itself already applied). A return whose
+    Jewel Code has no prior Memo Issue on record can't be attributed to any
+    store and is dropped."""
+    returns = _load_transaction_source(return_source)
+    returns["JewelCode"] = returns["JewelCode"].astype(str).str.strip()
+    returns["StyleCode"] = returns["StyleCode"].astype(str).str.strip()
+    returns = returns.drop(columns=["PartyCode"])  # always HO on this export — not the real store
+
+    returns["ReturnDate"] = pd.to_datetime(returns["JewelTransDate"], errors="coerce")
+    returns = returns[returns["ReturnDate"].notna()].copy()
+
+    issues = prepared_memo[["JewelCode", "Store Code", "Date"]].rename(
+        columns={"Store Code": "PartyCode", "Date": "IssueDate"}
+    ).sort_values("IssueDate")
+
+    matched = pd.merge_asof(
+        returns.sort_values("ReturnDate"), issues,
+        left_on="ReturnDate", right_on="IssueDate",
+        by="JewelCode", direction="backward",
+    )
+    matched = matched[matched["PartyCode"].notna()].copy()
+
+    matched = matched[matched["StyleCode"].isin(valid_styles)]
+
+    matched["Brand"] = brand_from_base_metal(matched["BaseMetal"])
+    matched = matched[matched["Brand"].notna()]
+
+    matched["Price Point"] = price_point(matched["MRP"].to_numpy(dtype=float), matched["Brand"].to_numpy())
+
+    matched["Date"] = matched["ReturnDate"].dt.normalize()
+    matched["Month"] = matched["ReturnDate"].dt.month.astype(int)
+    matched["Year"] = matched["ReturnDate"].dt.year.astype(int)
+
+    matched = matched.join(store_lookup, on="PartyCode")
+    matched = matched.rename(columns={"PartyCode": "Store Code", "StyleCode": "Style No",
+                                       "store_name": "Store Name", "grade": "Store Grade"})
+    return matched
+
+
+def compute_piece_lifecycle(sales_events, memo_events, memo_return_events, anchor):
+    """Traces each physical Jewel Code's own Issue -> [Return -> re-Issue]* ->
+    Sale timeline — something a nunique(JewelCode)-per-bucket count (Sales
+    Calendar, Memo Issue, Memo Return) can't reconstruct, since it only
+    keeps totals per Store/Style/Month, not which specific piece did what
+    when. Assumes a piece sells at most once (it leaves the memo/consignment
+    system for good once an end customer buys it) — a Jewel Code with
+    multiple Sales rows is treated as multiple independent pieces sharing a
+    tag, each matched to its own nearest prior Issue.
+
+    Returns (sold, unsold):
+    - sold: one row per Sale event with `DaysToSell` (Sale Date minus the
+      most recent Issue Date before it) and `CycleCount` (how many times
+      that Jewel Code was issued and returned again before this sale — 0 =
+      sold on the first try), plus that issue's Store/Style/Brand/Category/
+      Price Point. A Sale with no prior Issue on record (data gap) is
+      dropped — nothing to measure the duration against.
+    - unsold: one row per Jewel Code that's been issued but never sold, with
+      `DaysOnFloor` (anchor minus its most recent Issue Date) and
+      `CycleCount` (returns recorded for it so far), plus Store/Style/etc
+      from that most recent issue — a live aging / dead-stock-risk view.
+    """
+    issue_cols = ["JewelCode", "Date", "Store Name", "Store Code", "Style No",
+                  "Store Grade", "Brand", "Price Point", "Zone", "Category"]
+    issues = memo_events[issue_cols].rename(columns={"Date": "IssueDate"}).sort_values("IssueDate")
+    returns = memo_return_events[["JewelCode", "Date"]].rename(columns={"Date": "ReturnDate"})
+    sales = sales_events[["JewelCode", "Date"]].rename(columns={"Date": "SaleDate"}).sort_values("SaleDate")
+
+    sold = pd.merge_asof(sales, issues, left_on="SaleDate", right_on="IssueDate", by="JewelCode", direction="backward")
+    sold = sold[sold["IssueDate"].notna()].copy()
+    sold["DaysToSell"] = (sold["SaleDate"] - sold["IssueDate"]).dt.days
+
+    returns_before = returns.merge(sold[["JewelCode", "SaleDate"]], on="JewelCode")
+    returns_before = returns_before[returns_before["ReturnDate"] < returns_before["SaleDate"]]
+    cycle_counts = returns_before.groupby(["JewelCode", "SaleDate"]).size().reset_index(name="CycleCount")
+    sold = sold.merge(cycle_counts, on=["JewelCode", "SaleDate"], how="left")
+    sold["CycleCount"] = sold["CycleCount"].fillna(0).astype(int)
+
+    sold_jewelcodes = set(sales_events["JewelCode"])
+    latest_issue = issues.sort_values("IssueDate").groupby("JewelCode").tail(1)
+    unsold = latest_issue[~latest_issue["JewelCode"].isin(sold_jewelcodes)].copy()
+    unsold["DaysOnFloor"] = (anchor - unsold["IssueDate"]).dt.days
+
+    return_counts = returns.groupby("JewelCode").size().reset_index(name="CycleCount")
+    unsold = unsold.merge(return_counts, on="JewelCode", how="left")
+    unsold["CycleCount"] = unsold["CycleCount"].fillna(0).astype(int)
+
+    return sold, unsold
+
+
 def group_monthly(df, agg="count", out_col="Qty"):
     """df is the output of prepare_transactions. Used to build the Base
     Stock rate, the Sales Calendar reference, and the Memo Issue reference
@@ -244,3 +347,30 @@ def process_fresh_stock(stock_path):
     fresh["Price Point"] = price_point(fresh["Sale Price"].to_numpy(dtype=float), fresh["Brand"].to_numpy())
 
     return fresh[["Jewel Code", "Style No", "Brand", "Category", "Price Point", "ItemPcs"]].reset_index(drop=True)
+
+
+def process_all_pieces(stock_path, store_codes, store_lookup):
+    """Every piece in the stock file/API snapshot, piece-level (one row per
+    Jewel Code) — fresh (still at HO) and already-allocated (sitting at a
+    store) alike. Adds a "Current Store" column: blank for fresh stock,
+    the store's name for anything already allocated. Used by the Stock
+    Assortment Summary's best-store lookup so it can also suggest moving a
+    piece from the store it's currently at to a better one, not just place
+    brand-new HO stock — a store-to-store transfer isn't structurally
+    different from a HO-to-store one, it just starts from a non-blank
+    Client Code."""
+    stock = _load_stock_source(stock_path, STOCK_COLS)
+    stock["Style No"] = stock["Style No"].astype(str).str.strip()
+
+    stock["Brand"] = brand_from_base_metal(stock["Base Metal"])
+    stock = stock[stock["Brand"].notna()].copy()
+
+    stock["Price Point"] = price_point(stock["Sale Price"].to_numpy(dtype=float), stock["Brand"].to_numpy())
+
+    stock["Client Code"] = stock["Client Code"].astype(str).str.strip()
+    stock.loc[stock["Client Code"].isin(["nan", "None", ""]), "Client Code"] = np.nan
+    stock = stock.join(store_lookup, on="Client Code")
+    stock = stock.rename(columns={"store_name": "Current Store"})
+    stock["Current Store"] = stock["Current Store"].where(stock["Client Code"].isin(store_codes))
+
+    return stock[["Jewel Code", "Style No", "Brand", "Category", "Price Point", "ItemPcs", "Current Store"]].reset_index(drop=True)

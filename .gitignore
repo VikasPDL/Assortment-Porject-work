@@ -7,11 +7,26 @@ venv/
 *.egg-info/
 .claude/
 
+# Excel lock files (created while a workbook is open)
+~$*.xlsx
+
 # Raw source data — too large for git/GitHub (162MB / 61MB) and not read at
 # runtime; only used locally by "Recompute Base Stock" to rebuild reference_*.csv.
 # Deployment ships the prebuilt reference_*.csv files instead.
 Sales_Merged.csv
 Gati_Memo_Issue_Merged.csv
+Gati_Stock_Return_Merged.csv
 Sales_API_Fetched.csv
 Memo_Issue_API_Fetched.csv
+Memo_Return_API_Fetched.csv
+Stock_API_Fetched.csv
+Sales_Return_API_Fetched.csv
 Sales_Return_Merged.csv
+
+# Saved API URL/token per API, so they don't need retyping each session —
+# contain live credentials, never commit them.
+stock_api_config.json
+sales_api_config.json
+memo_issue_api_config.json
+memo_return_api_config.json
+sales_return_api_config.json

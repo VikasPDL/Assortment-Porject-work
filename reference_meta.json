@@ -1,8 +1,10 @@
 {
-  "last_refreshed": "2026-08-18T10:57:05",
+  "last_refreshed": "2026-09-01T09:49:41",
   "base_stock_rows": 5761,
   "sales_calendar_rows": 8110,
   "memo_issue_rows": 72047,
+  "memo_return_rows": 76922,
   "sales_daily_rows": 8144,
-  "memo_daily_rows": 74740
+  "memo_daily_rows": 74740,
+  "memo_return_daily_rows": 99446
 }
