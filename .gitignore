@@ -30,3 +30,7 @@ sales_api_config.json
 memo_issue_api_config.json
 memo_return_api_config.json
 sales_return_api_config.json
+
+# Shared cooldown lock across all 5 fetch buttons — transient runtime
+# state, resets naturally on its own each time it's stale.
+api_fetch_lock.json

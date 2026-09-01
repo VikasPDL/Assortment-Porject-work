@@ -353,34 +353,34 @@ st.markdown(
     .stat-card {
         background: var(--surface);
         border: 1px solid var(--border);
-        border-radius: var(--radius-lg);
-        padding: 1.1rem 1.25rem;
+        border-radius: var(--radius-md);
+        padding: 0.7rem 0.85rem;
         box-shadow: var(--shadow-sm);
         height: 100%;
     }
     /* min-height keeps the icon/label row the same height across every
        card in a row, so values line up even when one label wraps to 2
        lines and its neighbor doesn't. */
-    .stat-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.65rem; min-height: 2.3rem; }
+    .stat-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.4rem; margin-bottom: 0.4rem; min-height: 1.7rem; }
     .stat-card-label {
         color: var(--text-muted);
-        font-size: 0.72rem;
+        font-size: 0.65rem;
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.03em;
-        line-height: 1.35;
-        padding-top: 0.15rem;
+        line-height: 1.3;
+        padding-top: 0.1rem;
     }
     .stat-card-icon {
-        width: 2.2rem; height: 2.2rem;
+        width: 1.6rem; height: 1.6rem;
         border-radius: var(--radius-sm);
         display: flex; align-items: center; justify-content: center;
-        font-size: 1.1rem;
+        font-size: 0.85rem;
         flex-shrink: 0;
     }
-    .stat-card-value { color: var(--text); font-size: 1.6rem; font-weight: 700; line-height: 1.2; word-break: break-word; }
-    .stat-card-value.small { font-size: 1.05rem; }
-    .stat-card-sub { color: var(--text-faint); font-size: 0.82rem; margin-top: 0.25rem; }
+    .stat-card-value { color: var(--text); font-size: 1.15rem; font-weight: 700; line-height: 1.2; word-break: break-word; }
+    .stat-card-value.small { font-size: 0.85rem; }
+    .stat-card-sub { color: var(--text-faint); font-size: 0.7rem; margin-top: 0.15rem; }
 
     /* ---- Page header (breadcrumb + title, matches app-ui-reference_1.html) ---- */
     .page-breadcrumb {
@@ -396,6 +396,16 @@ st.markdown(
         letter-spacing: -0.01em;
         margin-bottom: 0.4rem;
     }
+
+    /* ---- Data freshness readout, next to the title (always visible, small text) ---- */
+    .freshness-panel { padding-top: 0.2rem; }
+    .freshness-row {
+        font-size: 0.72rem;
+        color: var(--text-faint);
+        line-height: 1.55;
+        white-space: nowrap;
+    }
+    .freshness-row b { color: var(--text-muted); font-weight: 600; }
 
     /* ---- Status badges (pill), matches app-ui-reference_1.html's Recent Files table ---- */
     .badge {
@@ -481,15 +491,30 @@ def render_page_header(num_label, title):
         )
     with info_col:
         with st.container(key="topbar_action_info"):
-            with st.popover("🕒", help="Base Stock reference data status"):
+            with st.popover("🕒", help="Data freshness — when each source was last refreshed"):
+                st.markdown("**Data freshness**")
                 if os.path.exists(META_OUT):
                     with open(META_OUT) as f:
                         info_meta = json.load(f)
                     refreshed = datetime.fromisoformat(info_meta["last_refreshed"]).strftime("%b %d, %H:%M")
-                    st.markdown(f"**Last refreshed:** {refreshed}")
+                    st.markdown(f"**Base Stock reference:** {refreshed}")
                     st.caption(f"{info_meta['base_stock_rows']:,} base-stock rows")
                 else:
-                    st.caption("Reference data not built yet.")
+                    st.caption("Base Stock reference: not built yet.")
+
+                st.divider()
+                for label, path in [
+                    ("Stock", STOCK_API_OUT),
+                    ("Sales", SALES_API_OUT),
+                    ("Sales Return", SALES_RETURN_API_OUT),
+                    ("Memo Issue", MEMO_API_OUT),
+                    ("Memo Return", MEMO_RETURN_API_OUT),
+                ]:
+                    if os.path.exists(path):
+                        stamp = datetime.fromtimestamp(os.path.getmtime(path)).strftime("%b %d, %H:%M")
+                        st.markdown(f"**{label}:** {stamp}")
+                    else:
+                        st.markdown(f"**{label}:** *never fetched*")
     with action_col:
         with st.container(key="topbar_action_refresh"):
             if st.button("🔄", key=f"refresh_{num_label}", help="Refresh"):
@@ -507,7 +532,7 @@ def render_html_table(df_or_styler, max_height=480):
     html = re.sub(r"<table[^>]*>", '<table class="html-table">', html, count=1)
     st.markdown(f'<div class="html-table-wrap" style="max-height:{max_height}px;">{html}</div>', unsafe_allow_html=True)
 
-title_col, stock_btn_col = st.columns([6, 1])
+title_col, stock_btn_col, freshness_col = st.columns([5, 1, 2])
 with title_col:
     st.markdown('<div class="home-eyebrow">Poddar Diamonds · Assortment Intelligence</div>', unsafe_allow_html=True)
     st.title("Assortment Stock & Base Stock Dashboard")
@@ -515,6 +540,19 @@ with title_col:
 # exist — st.empty() reserves this exact spot in the layout now so the
 # button renders here, next to the title, on every window.
 stock_btn_slot = stock_btn_col.empty()
+with freshness_col:
+    freshness_rows = "".join(
+        f'<div class="freshness-row"><b>{label}:</b> '
+        f'{datetime.fromtimestamp(os.path.getmtime(path)).strftime("%b %d, %H:%M") if os.path.exists(path) else "never fetched"}</div>'
+        for label, path in [
+            ("Stock", STOCK_API_OUT),
+            ("Sales", SALES_API_OUT),
+            ("Sales Return", SALES_RETURN_API_OUT),
+            ("Memo Issue", MEMO_API_OUT),
+            ("Memo Return", MEMO_RETURN_API_OUT),
+        ]
+    )
+    st.markdown(f'<div class="freshness-panel">{freshness_rows}</div>', unsafe_allow_html=True)
 
 # ---------------- Window registry + sidebar nav list ----------------
 # One row per window, driven by clicking a home tile or a sidebar nav
@@ -572,12 +610,42 @@ def _save_api_config(path, url, auth_name, auth_value):
         json.dump({"url": url, "auth_name": auth_name, "auth_value": auth_value}, f)
 
 
-def fetch_transaction_api(config_path, out_path):
+# All 5 fetch buttons (Stock + the 4 transaction APIs) hit the same
+# PoddarDiamonds backend host. Without a shared lock, two team members
+# clicking Fetch around the same time — or one person double-clicking —
+# could fire overlapping requests at that server. A plain st.session_state
+# flag wouldn't catch this: each browser tab gets its own session state, so
+# a lock has to live in a shared file on disk instead, visible to every
+# session hitting this same running app.
+FETCH_LOCK_FILE = "api_fetch_lock.json"
+API_FETCH_COOLDOWN_SECONDS = 30
+
+
+def _claim_fetch_lock(label):
+    """Raises if another fetch (any of the 5) claimed the lock less than
+    API_FETCH_COOLDOWN_SECONDS ago; otherwise claims it for this fetch."""
+    now = datetime.now()
+    if os.path.exists(FETCH_LOCK_FILE):
+        with open(FETCH_LOCK_FILE) as f:
+            lock = json.load(f)
+        elapsed = (now - datetime.fromisoformat(lock["at"])).total_seconds()
+        if elapsed < API_FETCH_COOLDOWN_SECONDS:
+            wait = int(API_FETCH_COOLDOWN_SECONDS - elapsed)
+            raise ValueError(
+                f"{lock['label']} was just fetched {int(elapsed)}s ago — wait {wait}s before fetching "
+                f"{label}, so we don't send overlapping requests to the server."
+            )
+    with open(FETCH_LOCK_FILE, "w") as f:
+        json.dump({"label": label, "at": now.isoformat()}, f)
+
+
+def fetch_transaction_api(label, config_path, out_path):
     """Shared by every date-ranged transaction API (Sales, Sales Return,
     Memo Issue, Memo Return): load its saved URL/token, fetch till date
     (API_FETCH_START_DATE through today), map, and save. Returns the row
     count fetched. Raises on any failure — the caller decides how to show
     it (inline st.error in the sidebar, a toast on the Home page, etc.)."""
+    _claim_fetch_lock(label)
     cfg = _load_api_config(config_path)
     if not cfg.get("url"):
         raise ValueError("No URL saved for this API yet — enter it in the sidebar's API Settings first.")
@@ -593,6 +661,7 @@ def fetch_stock_api():
     state — shared by the sidebar's Stock API button and the quick-access
     button next to the title. No date range (always a full current
     snapshot). Returns the row count fetched. Raises on failure."""
+    _claim_fetch_lock("Stock")
     cfg = _load_api_config(STOCK_API_CONFIG)
     if not cfg.get("url"):
         raise ValueError("No URL saved for the Stock API yet — enter it in the sidebar's Stock API section first.")
@@ -654,7 +723,7 @@ with st.sidebar:
             _save_api_config(SALES_API_CONFIG, sales_api_url, sales_auth_name, sales_auth_value)
             try:
                 with st.spinner("Fetching Sales API..."):
-                    n = fetch_transaction_api(SALES_API_CONFIG, SALES_API_OUT)
+                    n = fetch_transaction_api("Sales", SALES_API_CONFIG, SALES_API_OUT)
                 st.success(f"Fetched and saved {n} rows. Click 'Recompute Base Stock' above to merge them in.")
                 st.toast(f"✅ Sales API worked — {n} rows fetched", icon="✅")
             except Exception as e:
@@ -674,7 +743,7 @@ with st.sidebar:
             _save_api_config(SALES_RETURN_API_CONFIG, sales_return_api_url, sales_return_auth_name, sales_return_auth_value)
             try:
                 with st.spinner("Fetching Sales Return API..."):
-                    n = fetch_transaction_api(SALES_RETURN_API_CONFIG, SALES_RETURN_API_OUT)
+                    n = fetch_transaction_api("Sales Return", SALES_RETURN_API_CONFIG, SALES_RETURN_API_OUT)
                 st.success(f"Fetched and saved {n} rows to {SALES_RETURN_API_OUT}.")
                 st.toast(f"✅ Sales Return API worked — {n} rows fetched", icon="✅")
             except Exception as e:
@@ -693,7 +762,7 @@ with st.sidebar:
             _save_api_config(MEMO_API_CONFIG, memo_api_url, memo_auth_name, memo_auth_value)
             try:
                 with st.spinner("Fetching Memo Issue API..."):
-                    n = fetch_transaction_api(MEMO_API_CONFIG, MEMO_API_OUT)
+                    n = fetch_transaction_api("Memo Issue", MEMO_API_CONFIG, MEMO_API_OUT)
                 st.success(f"Fetched and saved {n} rows. Click 'Recompute Base Stock' above to merge them in.")
                 st.toast(f"✅ Memo Issue API worked — {n} rows fetched", icon="✅")
             except Exception as e:
@@ -713,7 +782,7 @@ with st.sidebar:
             _save_api_config(MEMO_RETURN_API_CONFIG, memo_return_api_url, memo_return_auth_name, memo_return_auth_value)
             try:
                 with st.spinner("Fetching Memo Return API..."):
-                    n = fetch_transaction_api(MEMO_RETURN_API_CONFIG, MEMO_RETURN_API_OUT)
+                    n = fetch_transaction_api("Memo Return", MEMO_RETURN_API_CONFIG, MEMO_RETURN_API_OUT)
                 st.success(f"Fetched and saved {n} rows. Click 'Recompute Base Stock' above to merge them in.")
                 st.toast(f"✅ Memo Return API worked — {n} rows fetched", icon="✅")
             except Exception as e:
@@ -1488,7 +1557,7 @@ if nav == "home":
                 if st.button(f"⬇️ Fetch {label}", key=f"quick_fetch_{label}", width="stretch", disabled=not api_calls_enabled):
                     try:
                         with st.spinner(f"Fetching {label} API..."):
-                            n = fetch_transaction_api(config_path, out_path)
+                            n = fetch_transaction_api(label, config_path, out_path)
                         st.toast(f"✅ {label} API worked — {n} rows fetched", icon="✅")
                     except Exception as e:
                         st.toast(f"❌ {label} API failed: {e}", icon="❌")
