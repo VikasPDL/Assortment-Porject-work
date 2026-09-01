@@ -2616,12 +2616,6 @@ if nav == "style_lookup":
 # ---------------- Window 14: Stock Assortment Summary ----------------
 if nav == "jewel_allocate":
     render_page_header(num, "Stock Assortment Summary — best SRP store, plus seasonal sales history")
-    st.write(
-        "Paste or upload a list of Jewel Codes — fresh stock still at HO, **or pieces already sitting "
-        "at a store** — to find the best store for each one, ranked by SRP %, brand-wise, exportable "
-        "as CSV — plus their seasonal sales history for a month you pick. For a piece already at a "
-        "store, this can surface a better store to transfer it to, not just placement for new stock."
-    )
     with st.expander("📖 How this is calculated"):
         st.markdown(
             "1. Match each Jewel Code you provide against **every piece in the current Stock API "
