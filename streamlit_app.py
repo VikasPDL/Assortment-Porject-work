@@ -6,6 +6,7 @@ from datetime import datetime
 import numpy as np
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 
 # Some pivots (e.g. SRP-with-row-stock) exceed pandas Styler's default
 # render cap (262,144 cells) once styled — raise it so those still render.
@@ -40,6 +41,32 @@ SALES_RETURN_API_CONFIG = "sales_return_api_config.json"
 API_FETCH_START_DATE = datetime(2019, 1, 1).date()
 
 st.set_page_config(page_title="Assortment Stock & Base Stock", layout="wide", initial_sidebar_state="collapsed")
+
+# `initial_sidebar_state="collapsed"` above only applies the first time a
+# browser has ever opened this app — Streamlit's frontend then remembers
+# the sidebar's last position in that browser's localStorage (key
+# "stSidebarCollapsed-<hash>") and that stored value wins over this
+# setting on every later visit, including a hard refresh. Clearing that
+# key on every load forces every visit to behave like a first one, so the
+# sidebar always starts collapsed regardless of what a previous session
+# left behind — a user can still freely expand it during a session, this
+# only resets the *next* page load's starting state. This relies on
+# Streamlit's internal key naming (found by inspecting its JS bundle, not
+# a documented API), so it could need updating if a future Streamlit
+# version changes that internal naming.
+components.html(
+    """
+    <script>
+    try {
+        const ls = window.parent.localStorage;
+        Object.keys(ls).forEach((k) => {
+            if (k.startsWith("stSidebarCollapsed-")) ls.removeItem(k);
+        });
+    } catch (e) {}
+    </script>
+    """,
+    height=0,
+)
 
 st.markdown(
     """
